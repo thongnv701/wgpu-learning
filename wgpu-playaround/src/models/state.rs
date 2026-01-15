@@ -5,7 +5,7 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use crate::{consts::VERTICES, models::vertex::Vertex};
+use crate::{consts::{INDICES, VERTICES}, enums::ShapeType, models::vertex::Vertex};
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -19,8 +19,20 @@ pub struct State {
     colored_pipeline: wgpu::RenderPipeline,
     use_colored_pipline: bool,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
+
+    // New 
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+
+    // Start buffers
+    /* start_vertex_buffer: wgpu::Buffer,
+    start_index_buffer: wgpu::Buffer,
+    start_num_indices: u32,
+
+    // Shape toggle
+    current_shape: ShapeType, */
 }
+
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
@@ -178,7 +190,16 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let num_vertices = VERTICES.len() as u32;
+        // New
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+        let num_indices = INDICES.len() as u32;
 
         Ok(Self {
             surface,
@@ -193,7 +214,8 @@ impl State {
             colored_pipeline,
             use_colored_pipline: false,
             vertex_buffer,
-            num_vertices,
+            index_buffer,
+            num_indices,
         })
     }
     pub fn window(&self) -> &Arc<Window> {
@@ -283,7 +305,9 @@ impl State {
 
             // New
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            // render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
