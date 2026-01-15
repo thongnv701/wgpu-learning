@@ -1,8 +1,11 @@
 use std::sync::Arc;
-use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::{Window, WindowId}};
+use wgpu::util::DeviceExt;
+use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+
+use crate::{consts::VERTICES, models::vertex::Vertex};
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -14,7 +17,9 @@ pub struct State {
     mouse_y: f32,
     solid_pipeline: wgpu::RenderPipeline,
     colored_pipeline: wgpu::RenderPipeline,
-    use_colored_pipline: bool
+    use_colored_pipline: bool,
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
 }
 
 impl State {
@@ -81,23 +86,24 @@ impl State {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shader.wgsl").into()),
         });
 
-        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render pipeline layout"),
-            bind_group_layouts: &[],
-            immediate_size: 0,
-        });
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render pipeline layout"),
+                bind_group_layouts: &[],
+                immediate_size: 0,
+            });
 
         // Pipeline 1: Solid pipeLine
-        let solid_pipline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor{
+        let solid_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState{
+            vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_solid"),
-                buffers: &[],
+                entry_point: Some("vs_main"),
+                buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
-            fragment: Some(wgpu::FragmentState{
+            fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
@@ -107,7 +113,7 @@ impl State {
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
-            primitive: wgpu::PrimitiveState{
+            primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
@@ -123,9 +129,8 @@ impl State {
                 alpha_to_coverage_enabled: false,
             },
             multiview_mask: None,
-            cache: None
+            cache: None,
         });
-
 
         // Pipeline 2: Colored (uses vs_colored)
         let colored_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -147,24 +152,33 @@ impl State {
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
-            primitive: wgpu::PrimitiveState{
+            primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
-                conservative: false
+                conservative: false,
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState{
+            multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview_mask:None,
-            cache: None
+            multiview_mask: None,
+            cache: None,
         });
+
+        // Buffer
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_vertices = VERTICES.len() as u32;
 
         Ok(Self {
             surface,
@@ -175,10 +189,11 @@ impl State {
             window,
             mouse_x: 0.0,
             mouse_y: 0.0,
-            solid_pipeline: solid_pipline,
+            solid_pipeline,
             colored_pipeline,
-            use_colored_pipline: false
-
+            use_colored_pipline: false,
+            vertex_buffer,
+            num_vertices,
         })
     }
     pub fn window(&self) -> &Arc<Window> {
@@ -195,17 +210,19 @@ impl State {
         }
     }
 
-    pub fn handle_key(& mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        match(code, is_pressed){
+    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
+        match (code, is_pressed) {
             (KeyCode::Escape, true) => event_loop.exit(),
             (KeyCode::Space, true) => {
                 self.use_colored_pipline = !self.use_colored_pipline;
-                println!("Switched to {} pipline", 
+                println!(
+                    "Switched to {} pipline",
                     if self.use_colored_pipline {
                         "Position-colored"
-                    }else{
+                    } else {
                         "Solid red"
-                    })
+                    }
+                )
             }
             _ => {}
         }
@@ -219,16 +236,20 @@ impl State {
         // Handle rendering
         self.window.request_redraw();
 
-        if !self.is_surface_configured{
+        if !self.is_surface_configured {
             return Ok(());
         }
 
         let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{
-            label: Some("Render Encoder"),
-        });
-  
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -250,17 +271,19 @@ impl State {
                 occlusion_query_set: None,
                 timestamp_writes: None,
                 multiview_mask: None,
-
             });
 
             let pipeline = if self.use_colored_pipline {
                 &self.colored_pipeline
-            }else{
+            } else {
                 &self.solid_pipeline
             };
 
             render_pass.set_pipeline(pipeline);
-            render_pass.draw(0..3, 0..1);
+
+            // New
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -276,5 +299,4 @@ impl State {
         self.mouse_x = norm_x as f32;
         self.mouse_y = norm_y as f32;
     }
-
 }
