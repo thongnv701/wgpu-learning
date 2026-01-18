@@ -5,7 +5,11 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use crate::{consts::{INDICES, VERTICES}, enums::ShapeType, models::vertex::Vertex};
+use crate::{
+    consts::{INDICES, STAR_INDICES, STAR_VERTICES, VERTICES},
+    enums::ShapeType,
+    models::vertex::Vertex,
+};
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -17,22 +21,21 @@ pub struct State {
     mouse_y: f32,
     solid_pipeline: wgpu::RenderPipeline,
     colored_pipeline: wgpu::RenderPipeline,
-    use_colored_pipline: bool,
+    use_colored_pipeline: bool,
     vertex_buffer: wgpu::Buffer,
 
-    // New 
+    // New
     index_buffer: wgpu::Buffer,
     num_indices: u32,
 
     // Start buffers
-    /* start_vertex_buffer: wgpu::Buffer,
-    start_index_buffer: wgpu::Buffer,
-    start_num_indices: u32,
+    star_vertex_buffer: wgpu::Buffer,
+    star_index_buffer: wgpu::Buffer,
+    star_num_indices: u32,
 
     // Shape toggle
-    current_shape: ShapeType, */
+    current_shape: ShapeType,
 }
-
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
@@ -105,13 +108,13 @@ impl State {
                 immediate_size: 0,
             });
 
-        // Pipeline 1: Solid pipeLine
+        // Pipeline 1: Solid pipeline (uses solid red color)
         let solid_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
+            label: Some("Solid Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_main"),
+                entry_point: Some("vs_solid"),
                 buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
@@ -144,14 +147,14 @@ impl State {
             cache: None,
         });
 
-        // Pipeline 2: Colored (uses vs_colored)
+        // Pipeline 2: Colored (uses vertex colors)
         let colored_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Colored Pipeline"),
+            label: Some("Colored Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_colored"),
-                buffers: &[],
+                entry_point: Some("vs_main"),
+                buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -191,15 +194,26 @@ impl State {
         });
 
         // New
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
-
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
         let num_indices = INDICES.len() as u32;
+
+        let star_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Start Vertex Buffer"),
+            contents: bytemuck::cast_slice(STAR_VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let star_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Star Index Buffer"),
+            contents: bytemuck::cast_slice(STAR_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let star_num_indices = STAR_INDICES.len() as u32;
 
         Ok(Self {
             surface,
@@ -212,10 +226,14 @@ impl State {
             mouse_y: 0.0,
             solid_pipeline,
             colored_pipeline,
-            use_colored_pipline: false,
+            use_colored_pipeline: false,
             vertex_buffer,
             index_buffer,
             num_indices,
+            star_vertex_buffer,
+            star_index_buffer,
+            star_num_indices,
+            current_shape: ShapeType::Pentagon,
         })
     }
     pub fn window(&self) -> &Arc<Window> {
@@ -236,15 +254,26 @@ impl State {
         match (code, is_pressed) {
             (KeyCode::Escape, true) => event_loop.exit(),
             (KeyCode::Space, true) => {
-                self.use_colored_pipline = !self.use_colored_pipline;
+                // Toggle between shapes and pipelines
+                self.current_shape = match self.current_shape {
+                    ShapeType::Pentagon => ShapeType::Star,
+                    ShapeType::Star => ShapeType::Pentagon,
+                };
+                self.use_colored_pipeline = !self.use_colored_pipeline;
+
+                let shape_name = match self.current_shape {
+                    ShapeType::Pentagon => "Pentagon",
+                    ShapeType::Star => "Star",
+                };
+                let pipeline_name = if self.use_colored_pipeline {
+                    "Colored"
+                } else {
+                    "Solid red"
+                };
                 println!(
-                    "Switched to {} pipline",
-                    if self.use_colored_pipline {
-                        "Position-colored"
-                    } else {
-                        "Solid red"
-                    }
-                )
+                    "Switched to {} shape with {} pipeline",
+                    shape_name, pipeline_name
+                );
             }
             _ => {}
         }
@@ -295,7 +324,7 @@ impl State {
                 multiview_mask: None,
             });
 
-            let pipeline = if self.use_colored_pipline {
+            let pipeline = if self.use_colored_pipeline {
                 &self.colored_pipeline
             } else {
                 &self.solid_pipeline
@@ -303,11 +332,26 @@ impl State {
 
             render_pass.set_pipeline(pipeline);
 
-            // New
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            /* render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            // render_pass.draw(0..self.num_vertices, 0..1);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); */
+
+            match self.current_shape {
+                ShapeType::Pentagon => {
+                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    render_pass
+                        .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+                }
+                ShapeType::Star => {
+                    render_pass.set_vertex_buffer(0, self.star_vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        self.star_index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    render_pass.draw_indexed(0..self.star_num_indices, 0, 0..1);
+                }
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

@@ -51,20 +51,19 @@ fn vs_main(
 
 @vertex
 fn vs_solid(
-    @builtin(vertex_index) in_vertex_index: u32,
+    model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    let x = f32(1 - i32(in_vertex_index)) * 0.5;
-    let y = f32(i32(in_vertex_index & 1u) * 2 - 1 ) * 0.5;
-    out.clip_position = vec4<f32>(x, y, 0.0, 1.0);
+    // Use the actual vertex position from the buffer
+    out.clip_position = vec4<f32>(model.position, 1.0);
 
-    // Solid red color for all vertices
+    // Solid red color for all vertices (ignoring vertex color)
     out.color = vec3<f32>(1.0, 0.0, 0.0);
 
     return out;
 }
 
-@vertex
+/* @vertex
 fn vs_colored(
     @builtin(vertex_index) in_vertex_index: u32
 ) -> VertexOutput {
@@ -77,6 +76,22 @@ fn vs_colored(
     out.color = vec3<f32>(
         (x + 0.5),
         (y + 0.5),
+        0.5
+    );
+
+    return out;
+} */
+
+@vertex
+fn vs_colored(
+    model: VertexInput,
+) -> VertexOutput {
+    var out: VertexOutput;
+    out.clip_position = vec4<f32>(model.position, 1.0);
+
+    out.color = vec3<f32>(
+        (model.position.x + 0.5),
+        (model.position.y + 0.5),
         0.5
     );
 
