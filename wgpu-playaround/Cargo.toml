@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0"
+image = "0.25"
+cgmath = "0.18"
 winit = { version = "0.30", features = ["android-native-activity"] }
-env_logger = "0.11"
+env_logger = "0.10"
 log = "0.4"
-wgpu = "28.0"
 pollster = "0.4"
-bytemuck = { version = "1.24", features = [ "derive" ] }
+wgpu = "29.0"
+bytemuck = { version = "1.24", features = [ "derive" ] } # NEW!
+anyhow = { version = "1.0", default-features = false }
