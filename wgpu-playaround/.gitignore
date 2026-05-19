@@ -1,1 +1,21 @@
+# Rust build output
 /target
+Cargo.lock
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Environment files
+.env
+.env.local
+
+# OS
+Thumbs.db

@@ -10,6 +10,6 @@ winit = { version = "0.30", features = ["android-native-activity"] }
 env_logger = "0.10"
 log = "0.4"
 pollster = "0.4"
-wgpu = "29.0"
+wgpu = "28.0"
 bytemuck = { version = "1.24", features = [ "derive" ] } # NEW!
 anyhow = { version = "1.0", default-features = false }
