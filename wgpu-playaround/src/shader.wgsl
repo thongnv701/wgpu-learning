@@ -16,6 +16,12 @@ struct VertexOutput {
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse:sampler;
+
+struct CameraUniform {
+    view_proj: mat4x4<f32>,
+};
+@group(1) @binding(0)
+var<uniform> camera: CameraUniform;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // This will be set by the clear color in render pass
@@ -29,7 +35,7 @@ fn vs_main(
     var out: VertexOutput;
     out.color = model.color;
     out.tex_coords = model.tex_coords;
-    out.clip_position = vec4<f32>(model.position, 1.0);
+    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
 
     return out;
 }
@@ -60,7 +66,7 @@ fn vs_solid(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(model.position, 1.0);
+    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
     out.color = vec3<f32>(1.0, 0.0, 0.0);
     out.tex_coords = model.tex_coords;
     return out;
@@ -90,7 +96,7 @@ fn vs_colored(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(model.position, 1.0);
+    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
 
     out.color = vec3<f32>(
         (model.position.x + 0.5),
